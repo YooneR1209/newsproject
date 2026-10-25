@@ -26,6 +26,8 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 3,
         "x-dead-letter-exchange": "newsproject.dlx",
         "x-dead-letter-routing-key": "clasificacion.article-ingested.dlq"
       }
@@ -35,7 +37,9 @@
       "vhost": "/",
       "durable": true,
       "auto_delete": false,
-      "arguments": {}
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
     },
     {
       "name": "busqueda.article-classified",
@@ -43,6 +47,8 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 3,
         "x-dead-letter-exchange": "newsproject.dlx",
         "x-dead-letter-routing-key": "busqueda.article-classified.dlq"
       }
@@ -52,7 +58,9 @@
       "vhost": "/",
       "durable": true,
       "auto_delete": false,
-      "arguments": {}
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
     },
     {
       "name": "notificaciones.article-classified",
@@ -60,6 +68,8 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 3,
         "x-dead-letter-exchange": "newsproject.dlx",
         "x-dead-letter-routing-key": "notificaciones.article-classified.dlq"
       }
@@ -69,7 +79,9 @@
       "vhost": "/",
       "durable": true,
       "auto_delete": false,
-      "arguments": {}
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
     },
     {
       "name": "notificaciones.user-preferences-updated",
@@ -77,6 +89,8 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 3,
         "x-dead-letter-exchange": "newsproject.dlx",
         "x-dead-letter-routing-key": "notificaciones.user-preferences-updated.dlq"
       }
@@ -86,7 +100,9 @@
       "vhost": "/",
       "durable": true,
       "auto_delete": false,
-      "arguments": {}
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
     }
   ],
   "bindings": [
