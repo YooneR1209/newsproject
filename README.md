@@ -1,53 +1,48 @@
-# newsproject
-## Instalación y ejecución
+# newsproject — Agregador de Noticias
 
-    git clone https://github.com/<TU_USUARIO>/newsproject.git
-    cd newsproject
-    git checkout ariana-dev      # kevin-dev o fabricio-dev
-    cp .env.example .env
-    docker compose up -d
+Agregador de noticias con microservicios (Sistemas Distribuidos, UNL). Ingesta obtiene artículos de fuentes RSS y sitios web, Clasificación les asigna categoría con TF-IDF + un clasificador de scikit-learn, Búsqueda los indexa y Notificaciones avisa en tiempo real a cada usuario según sus preferencias. Los servicios solo se comunican por eventos en RabbitMQ.
 
-Agregador de noticias con microservicios (Sistemas Distribuidos, UNL).
-Scrapers publican artículos a colas, un servicio los clasifica y otro envía notificaciones personalizadas en tiempo real.
+- Arquitectura completa: [`docs/arquitectura.md`](docs/arquitectura.md)
+- Contrato de eventos: [`docs/eventos.md`](docs/eventos.md) — **léanlo antes de programar**
 
-## Arquitectura
+![Arquitectura](docs/img/arquitectura.png)
 
-| Servicio | Responsable | Tecnología | Base de datos |
-|---|---|---|---|
-| ingesta | Kevin | Python (FastAPI) | MongoDB |
-| clasificacion | Fabricio | Python (FastAPI) | PostgreSQL |
-| busqueda | Fabricio | Python (FastAPI) | MongoDB |
-| usuarios | Ariana | Python (FastAPI) | PostgreSQL |
-| gateway | Ariana | Python (FastAPI) | — |
-| notificaciones | Ariel | Java 21 (Spring Boot) | PostgreSQL |
-| frontend | Todos | React | — |
+## Servicios
 
-La comunicación asíncrona entre servicios usa RabbitMQ. El contrato de eventos
-(exchange, routing keys, colas y JSON de cada mensaje) está en
-[`docs/eventos.md`](docs/eventos.md). **Léanlo antes de programar.**
+Cada microservicio de negocio es **un contenedor con su backend y su base de datos dentro**. La BD solo escucha en `localhost`, así ningún otro servicio puede leerla.
+
+| Servicio | Carpeta | Responsable | Tecnología | Base de datos (mismo contenedor) | Publica | Consume |
+|---|---|---|---|---|---|---|
+| Ingesta | `ingesta/` | Kevin | Python · FastAPI | MongoDB | `article.ingested` | — |
+| Clasificación | `clasificacion/` | Fabricio | Python · FastAPI · scikit-learn | PostgreSQL | `article.classified` | `article.ingested` |
+| Búsqueda | `busqueda/` | Fabricio | Python · FastAPI | MongoDB | — | `article.classified` |
+| Usuarios | `usuarios/` | Ariana | Python · FastAPI | PostgreSQL | `user.preferences.updated` | — |
+| Notificaciones | `notificaciones/` | Ariel | Java 21 · Spring Boot | PostgreSQL | — | `article.classified`, `user.preferences.updated` |
+| API Gateway | `gateway/` | Ariana | Python · FastAPI | — | — | — |
+| Frontend | `frontend/` | Todos | React · Vite · Nginx | — | — | — |
 
 ## Requisitos
 
 - Docker y Docker Compose v2 (`docker compose version`)
 - Git
 
-## Cómo levantar la infraestructura
+## Cómo levantar todo
 
 ```bash
-git clone <URL_DEL_REPOSITORIO>
+git clone https://github.com/YooneR1209/newsproject.git
 cd newsproject
-cp .env.example .env
+cp .env.example .env          # luego cambia las claves dentro de .env
+docker compose up -d --build
 ```
 
-Abre `.env` y cambia las claves (el archivo `.env` nunca se sube a Git).
-Luego:
+La primera vez tarda varios minutos porque construye las imágenes. Al terminar:
 
-```bash
-docker compose up -d
-```
-
-Esto levanta RabbitMQ, PostgreSQL y MongoDB, y carga automáticamente
-el exchange, las colas y los bindings.
+| Recurso | Dirección |
+|---|---|
+| Frontend | http://localhost:3000 |
+| API Gateway | http://localhost:8080 (por ejemplo `http://localhost:8080/health`) |
+| Panel de RabbitMQ | http://localhost:15672 (usuario y clave del `.env`) |
+| RabbitMQ (AMQP, solo desarrollo) | `localhost:5672` |
 
 ### Verificar que todo está bien
 
@@ -55,76 +50,67 @@ el exchange, las colas y los bindings.
 docker compose ps -a
 ```
 
-Debe verse así:
-
-- `newsproject-rabbitmq`, `newsproject-postgres` y `newsproject-mongo` en `healthy`
-- `newsproject-rabbitmq-init` en `Exited (0)` (es correcto: corre una vez y termina)
-
-Comprobaciones opcionales:
+- Los servicios `ingesta`, `clasificacion`, `busqueda`, `usuarios`, `notificaciones`, `gateway` y `rabbitmq` deben aparecer como `healthy`.
+- `newsproject-rabbitmq-init` debe aparecer como `Exited (0)`: corre una vez para cargar las colas y termina.
 
 ```bash
-docker logs newsproject-rabbitmq-init        # debe terminar con "Definiciones importadas"
-docker exec newsproject-rabbitmq rabbitmqctl list_queues name   # 8 colas
-docker exec newsproject-postgres psql -U <POSTGRES_USER> -c '\l' # usuarios, clasificacion, notificaciones
+docker logs newsproject-rabbitmq-init                                  # termina con "Definiciones importadas"
+docker exec newsproject-rabbitmq rabbitmqctl list_queues name type     # 8 colas quorum
 ```
 
-### Accesos desde tu máquina
+### Entrar a la base de datos de un servicio
 
-| Recurso | Dirección |
+Las BD no publican puertos; se entra desde su contenedor:
+
+```bash
+docker exec -it newsproject-clasificacion psql -U <CLASIFICACION_DB_USER> clasificacion
+docker exec -it newsproject-ingesta mongosh -u <INGESTA_DB_USER> -p <INGESTA_DB_PASS>
+```
+
+## Cómo trabajar en tu servicio
+
+Cada carpeta trae una **plantilla base** que ya funciona dentro del `docker compose` y solo responde `GET /health`. Reemplázala por tu implementación sin cambiar la estructura:
+
+| Archivo | Para qué sirve |
 |---|---|
-| Panel de RabbitMQ | http://localhost:15672 (usuario y clave del `.env`) |
-| RabbitMQ (AMQP) | `localhost:5672` |
-| PostgreSQL | `localhost:5432` |
-| MongoDB | `localhost:27017` |
+| `Dockerfile` | Imagen con tu backend y tu BD (PostgreSQL o MongoDB) |
+| `supervisord.conf` | Arranca dos procesos: `db` (la BD, solo en localhost) y `api` (tu backend) |
+| `app/main.py` o `src/...` | Tu código; ya tiene el endpoint `/health` |
 
-### Desde dentro de un contenedor (para tus servicios en Docker)
+Reglas para todos los servicios:
 
-Usa el nombre del servicio, no `localhost`:
+1. Tu backend lee `DATABASE_URL` y `RABBITMQ_URL` (o las variables `SPRING_*` en Notificaciones) del entorno; no escribas credenciales en el código.
+2. Reintenta la conexión a la BD y a RabbitMQ al arrancar: la BD puede tardar unos segundos en estar lista.
+3. `/health` debe responder 200 solo cuando la BD y RabbitMQ estén conectados.
+4. Sigue el contrato de `docs/eventos.md`: `ack` manual, idempotencia por `article_id` o `user_id`, y `nack` para enviar a la `.dlq`.
+5. Ningún servicio llama a otro por REST; solo publica o consume eventos.
 
-- RabbitMQ: `amqp://<usuario>:<clave>@rabbitmq:5672`
-- PostgreSQL: `postgres:5432`, con la base de tu servicio (`usuarios`, `clasificacion` o `notificaciones`)
-- MongoDB: `mongo:27017`
+Para probar tu servicio fuera de Docker (por ejemplo con `uvicorn --reload`), levanta solo el broker con `docker compose up -d rabbitmq rabbitmq-init`; el puerto 5672 se publica desde `docker-compose.override.yml`.
 
 ## Flujo de trabajo con Git
 
-- Cada integrante trabaja en su rama: `ariel-dev`, `ariana-dev`, `kevin-dev`, `fabricio-dev`.
-- Se desarrolla el servicio propio dentro de su carpeta (`ingesta/`, `usuarios/`, etc.).
-- Los cambios se integran a `main` mediante merge (preferiblemente con pull request).
+- Cada integrante trabaja en su rama: `kevin-dev`, `fabricio-dev`, `ariana-dev`, `ariel-dev`.
+- Antes de empezar, trae lo último de `main`: `git checkout <tu-rama> && git merge main`.
+- Los cambios llegan a `main` por pull request revisado por otro integrante.
+- Antes de cada merge, `docker compose up -d --build` debe levantar el sistema completo.
+- Los contratos de eventos y de REST solo cambian por pull request aprobado por los cuatro.
 - Un solo release al final: `v1.0`. No se crean releases intermedios.
-
-## Cómo agregar tu servicio al docker-compose
-
-1. Crea un `Dockerfile` dentro de la carpeta de tu servicio.
-2. Agrega tu servicio en `docker-compose.yml` (hay una plantilla comentada al final de `services`).
-3. Usa `depends_on` con `condition: service_healthy` para esperar a RabbitMQ y a la base de datos.
-4. Conéctalo a la red `newsproject-net`.
-5. Prueba que `docker compose up -d --build` siga funcionando completo.
 
 ## Problemas comunes
 
-**Un contenedor falla y aparece una carpeta en lugar de un archivo (por ejemplo `infra/postgres/init.sql`).**
-Docker crea una carpeta cuando un archivo montado no existe en la ruta indicada, y la deja con dueño `root`.
-Borra la carpeta y asegúrate de que el archivo existe:
+**Las colas no son de tipo quorum o `rabbitmq-init` falla.**
+Una cola existente no cambia de tipo. Si ya habías levantado la versión anterior, borra los volúmenes (se pierden los datos locales):
 
 ```bash
 docker compose down -v
-sudo rm -rf infra/postgres/init.sql   # solo si es una carpeta
-git checkout -- infra/                # restaura los archivos del repositorio
-docker compose up -d
+docker compose up -d --build
 ```
 
-**Las bases de datos `usuarios`, `clasificacion` y `notificaciones` no existen.**
-El script `init.sql` solo se ejecuta la primera vez, con el volumen vacío. Recrea los volúmenes
-(se borran los datos locales):
+**Un servicio queda en `unhealthy`.**
+Revisa sus logs: `docker compose logs -f <servicio>`. En los logs aparecen los dos procesos (`db` y `api`).
 
-```bash
-docker compose down -v
-docker compose up -d
-```
-
-**Error de puerto ocupado (5432, 5672, 27017).**
-Tienes ese servicio instalado localmente. Detenlo (por ejemplo `sudo systemctl stop postgresql`)
-o cambia el puerto de la izquierda en `docker-compose.yml` (`"5433:5432"`).
+**Error de puerto ocupado (3000, 8080, 5672, 15672).**
+Detén el programa que usa ese puerto o cambia el puerto de la izquierda en `docker-compose.yml` (por ejemplo `"8081:8000"`).
 
 **RabbitMQ aparece como no saludable justo después de arrancar.**
 Espera 20 a 30 segundos la primera vez y vuelve a ejecutar `docker compose ps -a`.
@@ -132,8 +118,10 @@ Espera 20 a 30 segundos la primera vez y vuelve a ejecutar `docker compose ps -a
 ## Comandos útiles
 
 ```bash
-docker compose up -d            # levantar
+docker compose up -d --build        # construir y levantar todo
 docker compose logs -f <servicio>   # ver logs
-docker compose down             # detener (conserva datos)
-docker compose down -v          # detener y borrar datos
+docker compose stop <servicio>      # detener un servicio (prueba de tolerancia a fallos)
+docker compose start <servicio>     # volver a iniciarlo
+docker compose down                 # detener (conserva datos)
+docker compose down -v              # detener y borrar datos
 ```

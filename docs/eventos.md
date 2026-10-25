@@ -31,7 +31,7 @@ Formato `<entidad>.<acción en pasado>`: un evento describe algo que ya ocurrió
 | `notificaciones.article-classified` | `article.classified` | Notificaciones |
 | `notificaciones.user-preferences-updated` | `user.preferences.updated` | Notificaciones |
 
-Cada cola tiene su cola de mensajes fallidos: `<nombre>.dlq` (dead-letter), a la que pasa el mensaje tras 3 reintentos fallidos.
+Las colas principales son de tipo **quorum** con `x-delivery-limit: 3`. Cada una tiene su cola de mensajes fallidos `<nombre>.dlq`, alimentada por el exchange `newsproject.dlx` (tipo `direct`): RabbitMQ cuenta las entregas y, al pasar de 3, mueve el mensaje a la `.dlq` sin lógica extra en el consumidor. La topología se carga sola desde `infra/rabbitmq/definitions.json`.
 
 ## 2. Sobre común (envelope)
 
@@ -49,7 +49,7 @@ Todos los mensajes comparten este envoltorio. El contenido específico va en `pa
 
 | Campo | Tipo | Notas |
 |---|---|---|
-| `event_id` | UUID v4 | Único por mensaje. Los consumidores lo usan para ser **idempotentes** (ignorar duplicados) |
+| `event_id` | UUID v4 | Único por mensaje; sirve para trazas y para descartar reentregas del mismo mensaje. La idempotencia de negocio va por entidad (sección 5) |
 | `event_type` | string | Igual a la routing key |
 | `occurred_at` | ISO 8601 UTC | Se usa para medir latencia extremo a extremo |
 | `version` | entero | Versión del esquema del payload |
@@ -81,13 +81,13 @@ Publica: **Ingesta**. Consume: **Clasificación**.
 
 | Campo | Tipo | Obligatorio | Notas |
 |---|---|---|---|
-| `article_id` | UUID | sí | Identificador del artículo en todo el sistema |
+| `article_id` | UUID v5 | sí | Identificador del artículo en todo el sistema. Se calcula con `uuid5(NAMESPACE_URL, url_normalizada)`: la misma noticia scrapeada dos veces tiene siempre el mismo `article_id` |
 | `url` | string | sí | URL original |
 | `title` | string | sí | |
 | `body` | string | sí | Texto sin HTML |
 | `source` | string | sí | Nombre o dominio de la fuente |
 | `published_at` | ISO 8601 UTC | sí | Fecha de publicación original |
-| `hash` | string | sí | SHA-256 de título + cuerpo, para deduplicar |
+| `hash` | string | sí | SHA-256 de título + cuerpo; Ingesta solo republica un artículo si su hash cambió |
 
 ### 3.2 `article.classified`
 
@@ -158,13 +158,35 @@ Notificaciones guarda una copia local de las preferencias a partir de este event
 
 ## 5. Reglas para los consumidores
 
-1. **Idempotencia:** si llega un `event_id` ya procesado, se hace `ack` y se descarta.
-2. **Confirmación manual (`ack`)** solo después de procesar y guardar con éxito.
-3. **Reintentos:** hasta 3 veces; después, el mensaje va a la `.dlq`.
-4. **Campos desconocidos:** se ignoran (permite añadir campos sin romper a nadie).
-5. **Cambios incompatibles** (renombrar o quitar campos): se sube `version` y se avisa al grupo antes de publicar.
-6. **Sin llamadas REST entre servicios** para estos flujos; solo eventos.
+1. **Idempotencia por entidad:** los eventos de artículo se guardan con upsert por `article_id`; los de preferencias por `user_id`, ignorando un evento con `occurred_at` más antiguo que el ya guardado. Un mensaje repetido se confirma con `ack` y se descarta.
+2. **Confirmación manual (`ack`)** solo después de procesar y guardar con éxito; nunca `auto-ack`.
+3. **Reintentos:** ante un error transitorio, `nack` con `requeue=true`; la cola quorum cuenta las entregas y al pasar de 3 envía el mensaje a su `.dlq`. Un mensaje inválido (JSON roto o campo obligatorio ausente) va directo a la `.dlq` con `nack` y `requeue=false`.
+4. **Prefetch** de 10 mensajes por consumidor.
+5. **Campos desconocidos:** se ignoran (permite añadir campos sin romper a nadie).
+6. **Cambios incompatibles** (renombrar o quitar campos): se sube `version` y se acuerdan por pull request aprobado por los 4 integrantes.
+7. **Sin llamadas REST entre servicios** para estos flujos; solo eventos.
 
 ## 6. Trazabilidad
 
-La latencia extremo a extremo se calcula como la hora en que el artículo llega a la pantalla del usuario menos `ingested_at` (o `published_at` del evento original, según la métrica que definan en el informe).
+La latencia extremo a extremo se calcula como la hora en que el artículo llega a la pantalla del usuario menos `ingested_at`. Las métricas completas están en `docs/arquitectura.md`, sección 10.
+
+## 7. Mensaje WebSocket al frontend
+
+No es un evento de RabbitMQ, pero también es contrato. Notificaciones lo envía por `/ws/notifications?user_id=<id>` (vía gateway) cuando un `article.classified` coincide con las preferencias del usuario:
+
+```json
+{
+  "type": "notification.new_article",
+  "data": {
+    "notification_id": "3d9e1c5a-7b2f-4e61-8a0d-5c4b3a2f1e90",
+    "article_id": "5f2a9c1e-8d3b-5c7a-b1e2-0a9d4e6f7c31",
+    "title": "Título de la noticia",
+    "summary": "Resumen corto del artículo.",
+    "category": "tecnologia",
+    "tags": ["inteligencia-artificial"],
+    "url": "https://ejemplo.com/noticia-1",
+    "ingested_at": "2026-10-25T14:30:00Z",
+    "sent_at": "2026-10-25T14:30:03Z"
+  }
+}
+```
