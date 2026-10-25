@@ -1,0 +1,158 @@
+{
+  "exchanges": [
+    {
+      "name": "newsproject.events",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "newsproject.dlx",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "clasificacion.article-ingested",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "newsproject.dlx",
+        "x-dead-letter-routing-key": "clasificacion.article-ingested.dlq"
+      }
+    },
+    {
+      "name": "clasificacion.article-ingested.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "busqueda.article-classified",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "newsproject.dlx",
+        "x-dead-letter-routing-key": "busqueda.article-classified.dlq"
+      }
+    },
+    {
+      "name": "busqueda.article-classified.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "notificaciones.article-classified",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "newsproject.dlx",
+        "x-dead-letter-routing-key": "notificaciones.article-classified.dlq"
+      }
+    },
+    {
+      "name": "notificaciones.article-classified.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "notificaciones.user-preferences-updated",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "newsproject.dlx",
+        "x-dead-letter-routing-key": "notificaciones.user-preferences-updated.dlq"
+      }
+    },
+    {
+      "name": "notificaciones.user-preferences-updated.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "newsproject.events",
+      "vhost": "/",
+      "destination": "clasificacion.article-ingested",
+      "destination_type": "queue",
+      "routing_key": "article.ingested",
+      "arguments": {}
+    },
+    {
+      "source": "newsproject.dlx",
+      "vhost": "/",
+      "destination": "clasificacion.article-ingested.dlq",
+      "destination_type": "queue",
+      "routing_key": "clasificacion.article-ingested.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "newsproject.events",
+      "vhost": "/",
+      "destination": "busqueda.article-classified",
+      "destination_type": "queue",
+      "routing_key": "article.classified",
+      "arguments": {}
+    },
+    {
+      "source": "newsproject.dlx",
+      "vhost": "/",
+      "destination": "busqueda.article-classified.dlq",
+      "destination_type": "queue",
+      "routing_key": "busqueda.article-classified.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "newsproject.events",
+      "vhost": "/",
+      "destination": "notificaciones.article-classified",
+      "destination_type": "queue",
+      "routing_key": "article.classified",
+      "arguments": {}
+    },
+    {
+      "source": "newsproject.dlx",
+      "vhost": "/",
+      "destination": "notificaciones.article-classified.dlq",
+      "destination_type": "queue",
+      "routing_key": "notificaciones.article-classified.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "newsproject.events",
+      "vhost": "/",
+      "destination": "notificaciones.user-preferences-updated",
+      "destination_type": "queue",
+      "routing_key": "user.preferences.updated",
+      "arguments": {}
+    },
+    {
+      "source": "newsproject.dlx",
+      "vhost": "/",
+      "destination": "notificaciones.user-preferences-updated.dlq",
+      "destination_type": "queue",
+      "routing_key": "notificaciones.user-preferences-updated.dlq",
+      "arguments": {}
+    }
+  ]
+}

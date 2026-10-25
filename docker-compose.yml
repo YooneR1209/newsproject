@@ -1,0 +1,118 @@
+# newsproject — infraestructura base
+# Levantar:  docker compose up -d
+# Panel RabbitMQ: http://localhost:15672  (usuario/clave del .env)
+
+name: newsproject
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: newsproject-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # Panel web
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - newsproject-net
+  rabbitmq-init:
+    image: curlimages/curl:8.10.1
+    container_name: newsproject-rabbitmq-init
+    restart: "no"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASS: ${RABBITMQ_PASS}
+    volumes:
+      - ./infra/rabbitmq/definitions.json:/definitions.json:ro
+    entrypoint:
+      - sh
+      - -c
+      - >
+        curl -fsS --retry 15 --retry-delay 3 --retry-connrefused
+        -u "$$RABBITMQ_USER:$$RABBITMQ_PASS"
+        -H "content-type: application/json"
+        -X POST http://rabbitmq:15672/api/definitions
+        -d @/definitions.json
+        && echo "Definiciones importadas"
+    networks:
+      - newsproject-net
+
+  postgres:
+    image: postgres:16
+    container_name: newsproject-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Se ejecuta solo la primera vez (volumen vacío)
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - newsproject-net
+
+  mongo:
+    image: mongo:7
+    container_name: newsproject-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - newsproject-net
+
+  # ---------------------------------------------------------------
+  # Cada integrante agrega su servicio desde su rama. Plantilla:
+  #
+  # notificaciones:
+  #   build: ./notificaciones
+  #   container_name: newsproject-notificaciones
+  #   restart: unless-stopped
+  #   environment:
+  #     RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+  #     DB_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/notificaciones
+  #   depends_on:
+  #     rabbitmq: { condition: service_healthy }
+  #     postgres: { condition: service_healthy }
+  #   networks:
+  #     - newsproject-net
+  # ---------------------------------------------------------------
+
+volumes:
+  rabbitmq_data:
+  postgres_data:
+  mongo_data:
+
+networks:
+  newsproject-net:
+    driver: bridge
