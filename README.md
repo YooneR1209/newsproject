@@ -1,11 +1,11 @@
 # newsproject
-Instalación y ejecución
+## Instalación y ejecución
 
-git clone https://github.com/<TU_USUARIO>/newsproject.git
-cd newsproject
-git checkout ariana-dev  # kevin-dev o fabricio-dev
-cp .env.example .env
-docker compose up -d
+    git clone https://github.com/<TU_USUARIO>/newsproject.git
+    cd newsproject
+    git checkout ariana-dev
+    cp .env.example .env
+    docker compose up -d
 
 Agregador de noticias con microservicios (Sistemas Distribuidos, UNL).
 Scrapers publican artículos a colas, un servicio los clasifica y otro envía notificaciones personalizadas en tiempo real.
