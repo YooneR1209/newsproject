@@ -3,7 +3,7 @@
 
     git clone https://github.com/<TU_USUARIO>/newsproject.git
     cd newsproject
-    git checkout ariana-dev
+    git checkout ariana-dev      # kevin-dev o fabricio-dev
     cp .env.example .env
     docker compose up -d
 
