@@ -1,0 +1,17 @@
+category,source,url
+politica,eluniverso.com,https://www.eluniverso.com/arc/outboundfeeds/rss/category/politica/?website=el-universo&sort=first_publish_date%3Adesc&outputType=xml
+economia,eluniverso.com,https://www.eluniverso.com/arc/outboundfeeds/rss/category/economia/?website=el-universo&sort=first_publish_date%3Adesc&outputType=xml
+economia,elpais.com,https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/economia/portada
+tecnologia,eluniverso.com,https://www.eluniverso.com/arc/outboundfeeds/rss-subsection/larevista/tecnologia?outputType=xml
+tecnologia,elpais.com,https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/tecnologia/portada
+deportes,eluniverso.com,https://www.eluniverso.com/arc/outboundfeeds/rss/category/deportes/?website=el-universo&sort=first_publish_date%3Adesc&outputType=xml
+deportes,elcomercio.com,https://elcomercio.com/rss/deportes
+deportes,elpais.com,https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/deportes/portada
+salud,eluniverso.com,https://www.eluniverso.com/arc/outboundfeeds/rss-subsection/larevista/salud?outputType=xml
+salud,eluniverso.com,https://www.eluniverso.com/arc/outboundfeeds/rss-subsection/larevista/cuerpo-alma?outputType=xml
+cultura,eluniverso.com,https://www.eluniverso.com/arc/outboundfeeds/rss-subsection/entretenimiento/cultura?outputType=xml
+cultura,eluniverso.com,https://www.eluniverso.com/arc/outboundfeeds/rss-subsection/entretenimiento/libros?outputType=xml
+cultura,eluniverso.com,https://www.eluniverso.com/arc/outboundfeeds/rss-subsection/entretenimiento/teatro?outputType=xml
+cultura,elpais.com,https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/cultura/portada
+internacional,eluniverso.com,https://www.eluniverso.com/arc/outboundfeeds/rss/category/internacional/?website=el-universo&sort=first_publish_date%3Adesc&outputType=xml
+internacional,elpais.com,https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/internacional/portada
