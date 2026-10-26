@@ -105,6 +105,9 @@ def check_feeds() -> None:
                 entries = fetch(client, feed["url"])
                 long_enough = sum(len(entry_text(e).split()) >= MIN_WORDS for e in entries)
                 print(f"OK    {feed['category']:<14} {feed['source']:<16} {len(entries):>3} entradas, {long_enough:>3} útiles")
+                # Títulos de ejemplo: para confirmar a ojo que el feed trae noticias de esa categoría.
+                for entry in entries[:3]:
+                    print(f"        · {' '.join(entry.get('title', '').split())[:100]}")
             except Exception as exc:  # noqa: BLE001 - se reporta y se sigue con el siguiente feed
                 print(f"FALLA {feed['category']:<14} {feed['source']:<16} {exc}")
             time.sleep(PAUSE_BETWEEN_FEEDS)
@@ -123,6 +126,7 @@ def collect_once() -> None:
             except Exception as exc:  # noqa: BLE001
                 print(f"FALLA {feed['category']} {feed['source']}: {exc}")
                 continue
+            before = len(new_rows)
             for entry in entries:
                 if not entry.get("link"):
                     continue
@@ -145,6 +149,10 @@ def collect_once() -> None:
                 }
                 dataset[url] = row
                 new_rows.append(row)
+            added = new_rows[before:]
+            if added:
+                # Una línea por feed con noticias nuevas y un título de ejemplo, para revisar etiquetas en el log.
+                print(f"+{len(added):<3} {feed['category']:<14} {feed['source']:<16} · {added[0]['title'][:80]}")
             time.sleep(PAUSE_BETWEEN_FEEDS)
 
     write_header = not DATASET_FILE.exists()
