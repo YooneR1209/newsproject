@@ -9,7 +9,8 @@ Uso (desde la raíz del repositorio):
     python clasificacion/tools/collect_dataset.py --check          # prueba los feeds, no guarda nada
     python clasificacion/tools/collect_dataset.py                  # una pasada
     python clasificacion/tools/collect_dataset.py --loop 60        # una pasada cada 60 minutos
-    python clasificacion/tools/collect_dataset.py --sample-test 100  # muestra para revisar a mano
+    python clasificacion/tools/collect_dataset.py --sample-test 140  # muestra para revisar a mano
+    python clasificacion/tools/collect_dataset.py --sample-test 140 --local-share 0.6  # 60 % ecuatorianas
 
 La categoría "otros" no se recolecta: el servicio la asigna cuando la
 confianza del modelo es baja (MIN_SCORE).
@@ -154,27 +155,56 @@ def collect_once() -> None:
         writer.writerows(new_rows)
 
     totals = Counter(row["category"] for row in dataset.values())
+    countries = {feed["source"]: feed.get("country", "").strip().upper() or "?" for feed in feeds}
+    by_country = Counter(countries.get(row["source"], "?") for row in dataset.values())
     print(f"\n{now}: {len(new_rows)} nuevas; {conflicts} vistas en esta pasada con otra sección (se conserva la primera)")
     print("Total por categoría: " + ", ".join(f"{c}={totals.get(c, 0)}" for c in sorted(CATEGORIES)))
+    print("Total por país: " + ", ".join(f"{c}={n}" for c, n in by_country.most_common()))
 
 
-def sample_test(n: int) -> None:
-    """Muestra estratificada para revisar a mano: será el conjunto de prueba del informe."""
+def source_countries() -> dict[str, str]:
+    """País de cada fuente según la columna country de feeds.csv (EC, ES, AR...)."""
+    return {feed["source"]: feed.get("country", "").strip().upper() for feed in load_feeds()}
+
+
+def sample_test(n: int, local_share: float) -> None:
+    """Muestra para revisar a mano: será el conjunto de prueba del informe.
+
+    En cada categoría toma la misma cantidad de noticias, y dentro de ella una
+    proporción `local_share` de fuentes ecuatorianas (country = EC) y el resto
+    de otros países. Si una categoría no tiene suficientes de un grupo, completa
+    con el otro para no quedarse corta.
+    """
     dataset = list(load_dataset().values())
     if not dataset:
         sys.exit("dataset.csv está vacío: primero recolecta noticias.")
+    countries = source_countries()
     by_category: dict[str, list[dict]] = {}
     for row in dataset:
         by_category.setdefault(row["category"], []).append(row)
     per_category = max(1, n // len(by_category))
-    random.seed(42)
-    sample = [row for rows in by_category.values() for row in random.sample(rows, min(per_category, len(rows)))]
+
+    rng = random.Random(42)
+    sample, summary = [], []
+    for category in sorted(by_category):
+        rows = by_category[category]
+        local = [r for r in rows if countries.get(r["source"]) == "EC"]
+        other = [r for r in rows if countries.get(r["source"]) != "EC"]
+        want_local = round(per_category * local_share)
+        take_local = min(want_local, len(local))
+        take_other = min(per_category - take_local, len(other))
+        take_local = min(per_category - take_other, len(local))  # completar con locales si faltan extranjeras
+        sample += rng.sample(local, take_local) + rng.sample(other, take_other)
+        summary.append(f"{category}={take_local} EC + {take_other} otros")
+
+    rng.shuffle(sample)  # para revisar sin agrupar por categoría
     with TEST_FILE.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["url", "title", "text", "category", "category_revisada"])
+        writer = csv.DictWriter(f, fieldnames=["url", "source", "title", "text", "category", "category_revisada"])
         writer.writeheader()
         for row in sample:
-            writer.writerow({k: row[k] for k in ("url", "title", "text", "category")} | {"category_revisada": ""})
+            writer.writerow({k: row[k] for k in ("url", "source", "title", "text", "category")} | {"category_revisada": ""})
     print(f"{len(sample)} noticias en {TEST_FILE.name}: completen la columna category_revisada a mano.")
+    print("Mezcla: " + ", ".join(summary))
 
 
 def main() -> None:
@@ -182,12 +212,16 @@ def main() -> None:
     parser.add_argument("--check", action="store_true", help="probar los feeds sin guardar nada")
     parser.add_argument("--loop", type=int, metavar="MIN", help="repetir cada MIN minutos")
     parser.add_argument("--sample-test", type=int, metavar="N", help="generar test_set.csv con N noticias")
+    parser.add_argument("--local-share", type=float, default=0.5, metavar="P",
+                        help="con --sample-test: proporción de noticias ecuatorianas por categoría (0 a 1, por defecto 0.5)")
     args = parser.parse_args()
+    if not 0 <= args.local_share <= 1:
+        parser.error("--local-share debe estar entre 0 y 1")
 
     if args.check:
         check_feeds()
     elif args.sample_test:
-        sample_test(args.sample_test)
+        sample_test(args.sample_test, args.local_share)
     elif args.loop:
         while True:
             collect_once()
