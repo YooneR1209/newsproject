@@ -19,6 +19,7 @@ import csv
 import random
 import sys
 import time
+import warnings
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,7 +27,10 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import feedparser
 import httpx
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
+
+# Algunos resúmenes son solo una URL; BeautifulSoup avisa, pero no es un error.
+warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 FEEDS_FILE = DATA_DIR / "feeds.csv"
