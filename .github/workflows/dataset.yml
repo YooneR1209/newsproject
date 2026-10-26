@@ -1,0 +1,74 @@
+# Recolecta el dataset de Clasificación cada hora, aunque nadie tenga la PC encendida.
+#
+# - Corre clasificacion/tools/collect_dataset.py en los servidores de GitHub.
+# - El dataset vive en la rama "dataset" (solo dataset.csv), así no ensucia main.
+# - Para entrenar: git fetch origin dataset
+#                  git show origin/dataset:dataset.csv > clasificacion/data/dataset.csv
+# - Para correrlo a mano: pestaña Actions → "Recolectar dataset" → Run workflow.
+#
+# GitHub solo ejecuta flujos programados que estén en la rama por defecto (main).
+
+name: Recolectar dataset
+
+on:
+  schedule:
+    - cron: "17 * * * *"   # cada hora, minuto 17 (UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: recolectar-dataset
+  cancel-in-progress: false
+
+jobs:
+  recolectar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Código del recolector (main)
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: clasificacion/tools/requirements.txt
+
+      - name: Dependencias
+        run: pip install -r clasificacion/tools/requirements.txt
+
+      - name: Traer el dataset acumulado (rama dataset)
+        env:
+          REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+        run: |
+          if git clone --quiet --depth 1 --branch dataset "$REMOTE" ds; then
+            echo "Rama dataset encontrada"
+          else
+            echo "Primera ejecución: se crea la rama dataset"
+            git init --quiet -b dataset ds
+            git -C ds remote add origin "$REMOTE"
+          fi
+          if [ -f ds/dataset.csv ]; then
+            cp ds/dataset.csv clasificacion/data/dataset.csv
+          fi
+
+      - name: Recolectar
+        run: python clasificacion/tools/collect_dataset.py
+
+      - name: Guardar en la rama dataset
+        run: |
+          [ -f clasificacion/data/dataset.csv ] || { echo "Sin datos todavía"; exit 0; }
+          cp clasificacion/data/dataset.csv ds/dataset.csv
+          cd ds
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dataset.csv
+          if git diff --cached --quiet; then
+            echo "Sin noticias nuevas"
+            exit 0
+          fi
+          FILAS=$(($(wc -l < dataset.csv) - 1))
+          git commit --quiet -m "dataset: $FILAS noticias ($(date -u +%Y-%m-%dT%H:%MZ))"
+          git push --quiet origin dataset

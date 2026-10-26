@@ -162,12 +162,14 @@ services:
       NOTIFICACIONES_URL: http://notificaciones:8080
     ports:
       - "8080:8000"
+    # service_started (no healthy): si un servicio falla, el gateway igual
+    # arranca y responde 503 solo en las rutas de ese servicio.
     depends_on:
-      ingesta: { condition: service_healthy }
-      clasificacion: { condition: service_healthy }
-      busqueda: { condition: service_healthy }
-      usuarios: { condition: service_healthy }
-      notificaciones: { condition: service_healthy }
+      ingesta: { condition: service_started }
+      clasificacion: { condition: service_started }
+      busqueda: { condition: service_started }
+      usuarios: { condition: service_started }
+      notificaciones: { condition: service_started }
     healthcheck: *python-health
     networks: [newsproject-net]
 
