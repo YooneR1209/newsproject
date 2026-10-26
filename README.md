@@ -87,6 +87,27 @@ Reglas para todos los servicios:
 
 Para probar tu servicio fuera de Docker (por ejemplo con `uvicorn --reload`), levanta solo el broker con `docker compose up -d rabbitmq rabbitmq-init`; el puerto 5672 se publica desde `docker-compose.override.yml`.
 
+## Dataset de Clasificación
+
+El modelo de Clasificación (TF-IDF + Naive Bayes o regresión logística) se entrena con noticias etiquetadas por la **sección** del medio: todo lo del feed de deportes es `deportes`.
+
+- `clasificacion/data/feeds.csv`: feeds por sección, con su categoría y país (`EC`, `ES`, `AR`).
+- `clasificacion/tools/collect_dataset.py`: lee los feeds y agrega las noticias nuevas sin duplicar.
+- `.github/workflows/dataset.yml`: GitHub Actions lo ejecuta cada hora y guarda `dataset.csv` en la rama `dataset` (no en `main`).
+
+```bash
+# Traer el dataset acumulado
+git fetch origin dataset
+git show origin/dataset:dataset.csv > clasificacion/data/dataset.csv
+
+# Probar los feeds o armar el conjunto de prueba (revisión manual)
+pip install -r clasificacion/tools/requirements.txt
+python clasificacion/tools/collect_dataset.py --check
+python clasificacion/tools/collect_dataset.py --sample-test 140 --local-share 0.5
+```
+
+Ingesta arma el texto de cada noticia con las mismas funciones que el recolector (`normalize_url`, `clean_html`, `entry_text`), para que el modelo reciba en producción textos iguales a los de entrenamiento. Detalle en `docs/arquitectura.md`, sección 3.2.
+
 ## Flujo de trabajo con Git
 
 - Cada integrante trabaja en su rama: `kevin-dev`, `fabricio-dev`, `ariana-dev`, `ariel-dev`.
