@@ -74,6 +74,7 @@ Publica: **Ingesta**. Consume: **Clasificación**.
     "body": "Texto limpio del artículo...",
     "source": "ejemplo.com",
     "published_at": "2026-10-25T13:55:00Z",
+    "image_url": "https://ejemplo.com/fotos/noticia-1.jpg",
     "hash": "sha256-del-contenido"
   }
 }
@@ -87,7 +88,8 @@ Publica: **Ingesta**. Consume: **Clasificación**.
 | `body` | string | sí | Texto sin HTML |
 | `source` | string | sí | Nombre o dominio de la fuente |
 | `published_at` | ISO 8601 UTC | sí | Fecha de publicación original |
-| `hash` | string | sí | SHA-256 de título + cuerpo; Ingesta solo republica un artículo si su hash cambió |
+| `image_url` | string o `null` | no | Imagen de portada que trae el feed (URL absoluta `https://`). `null` o ausente si no hay. Ver sección 3.4 |
+| `hash` | string | sí | SHA-256 de título + cuerpo (sin `image_url`); Ingesta solo republica un artículo si su hash cambió |
 
 ### 3.2 `article.classified`
 
@@ -107,6 +109,7 @@ Publica: **Clasificación**. Consume: **Búsqueda** y **Notificaciones**.
     "source": "ejemplo.com",
     "published_at": "2026-10-25T13:55:00Z",
     "ingested_at": "2026-10-25T14:30:00Z",
+    "image_url": "https://ejemplo.com/fotos/noticia-1.jpg",
     "category": "tecnologia",
     "tags": ["inteligencia-artificial", "ecuador"],
     "score": 0.87
@@ -118,6 +121,7 @@ Publica: **Clasificación**. Consume: **Búsqueda** y **Notificaciones**.
 |---|---|---|---|
 | `article_id` | UUID | sí | El mismo de `article.ingested` |
 | `url`, `title`, `source`, `published_at` | — | sí | Copiados del evento original |
+| `image_url` | string o `null` | no | Copiado tal cual de `article.ingested`; no se usa para clasificar |
 | `summary` | string | sí | Primeras ~200 palabras o resumen generado |
 | `ingested_at` | ISO 8601 UTC | sí | Copia de `occurred_at` de `article.ingested`; necesario para calcular latencia |
 | `category` | string | sí | Una de las categorías de la sección 4 |
@@ -152,6 +156,16 @@ Publica: **Usuarios**. Consume: **Notificaciones**.
 
 Notificaciones guarda una copia local de las preferencias a partir de este evento, así no depende de que Usuarios esté disponible.
 
+### 3.4 Imagen de portada (`image_url`)
+
+Campo **opcional** de `article.ingested` y `article.classified`, para mostrar la portada de cada noticia en el frontend.
+
+- **Origen:** Ingesta lo toma del propio feed, en este orden: `media:content` de tipo imagen, `media:thumbnail`, `enclosure` de tipo `image/*` y, si no hay ninguno, la primera `<img>` del contenido o resumen. Solo se acepta una URL absoluta `https://`; si no hay, va `null`.
+- **No se descarga** ni se guarda la imagen: el frontend la carga desde el medio y muestra un marcador si no hay o no carga.
+- **Recorrido:** Clasificación la copia sin cambios; Búsqueda y Notificaciones la guardan y la devuelven en sus respuestas REST y en el mensaje WebSocket (sección 7).
+- **Compatibilidad:** es un campo nuevo y opcional, y los consumidores ignoran lo que no conocen (regla 5 de la sección 5), así que `version` sigue en 1.
+- **No afecta al modelo ni al dataset:** el clasificador usa solo `title + ". " + body`, y `clean_html` elimina las `<img>`, así que el texto es idéntico con o sin imagen.
+
 ## 4. Categorías válidas
 
 `politica`, `economia`, `tecnologia`, `deportes`, `salud`, `cultura`, `internacional`, `otros`
@@ -185,8 +199,11 @@ No es un evento de RabbitMQ, pero también es contrato. Notificaciones lo envía
     "category": "tecnologia",
     "tags": ["inteligencia-artificial"],
     "url": "https://ejemplo.com/noticia-1",
+    "image_url": "https://ejemplo.com/fotos/noticia-1.jpg",
     "ingested_at": "2026-10-25T14:30:00Z",
     "sent_at": "2026-10-25T14:30:03Z"
   }
 }
 ```
+
+`image_url` puede ser `null`; el frontend muestra entonces un marcador con la categoría.
