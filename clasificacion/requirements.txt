@@ -1,2 +1,7 @@
 fastapi==0.115.4
 uvicorn[standard]==0.32.0
+asyncpg==0.30.0
+aio-pika==9.4.3
+# Entrenar con estas mismas versiones para que el contenedor pueda cargar model.joblib.
+scikit-learn==1.5.2
+joblib==1.4.2
