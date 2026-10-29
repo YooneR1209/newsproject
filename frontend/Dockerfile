@@ -2,8 +2,7 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-# Cambiar a `npm ci` cuando se suba package-lock.json
-RUN npm install --no-audit --no-fund
+RUN npm ci
 COPY . .
 RUN npm run build
 
