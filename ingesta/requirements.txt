@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+motor
+aio-pika
+httpx
+feedparser
+beautifulsoup4
+pydantic
