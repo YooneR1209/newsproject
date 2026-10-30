@@ -1,0 +1,122 @@
+:root {
+  --fondo: #f6f7f9;
+  --texto: #1f2328;
+  --suave: #59636e;
+  --borde: #d8dee4;
+  --barra: #1f2a44;
+  --acento: #2f6fdb;
+  --alerta: #d1242f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+  color: var(--texto);
+  background: var(--fondo);
+}
+
+/* Barra superior */
+.barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 12px 16px;
+  background: var(--barra);
+  color: #fff;
+}
+
+.marca {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: #c9d4ea;
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.nav-link.active {
+  color: #fff;
+  background: var(--acento);
+}
+
+.badge {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--alerta);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+
+/* Contenido */
+.contenido {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.responsable {
+  color: var(--suave);
+  font-size: 0.9rem;
+}
+
+/* Portada de una noticia */
+.portada {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--borde);
+}
+
+.portada-vacia {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--suave);
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+@media (max-width: 600px) {
+  .barra {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .nav-link {
+    padding: 6px 8px;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+  }
+}

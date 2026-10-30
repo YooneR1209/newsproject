@@ -1,0 +1,10 @@
+# Se aplica automáticamente con `docker compose up` en desarrollo.
+# Publica el puerto AMQP para probar un servicio fuera de Docker
+# (por ejemplo, con uvicorn o mvn spring-boot:run en tu máquina).
+# Para la demo puedes ignorarlo con:
+#   docker compose -f docker-compose.yml up -d --build
+
+services:
+  rabbitmq:
+    ports:
+      - "5672:5672"

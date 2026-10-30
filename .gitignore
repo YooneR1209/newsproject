@@ -1,6 +1,27 @@
+# Secretos
 .env
+
+# IDEs
 .idea/
-target/
+.vscode/
+*.iml
+
+# Python
 __pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node / React
 node_modules/
-EOF
+dist/
+build/
+
+# Java / Maven
+target/
+
+# Sistema
+.DS_Store
+
+# Dataset de Clasificación: vive en la rama "dataset"
+clasificacion/data/dataset.csv

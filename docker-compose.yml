@@ -1,10 +1,32 @@
-# newsproject — infraestructura base
-# Levantar:  docker compose up -d
-# Panel RabbitMQ: http://localhost:15672  (usuario/clave del .env)
+# newsproject — Agregador de Noticias
+# Levantar todo:   docker compose up -d --build
+# Panel RabbitMQ:  http://localhost:15672   (usuario/clave del .env)
+# Frontend:        http://localhost:3000
+# API Gateway:     http://localhost:8080
+#
+# Cada microservicio de negocio es UN contenedor con su backend y su base de
+# datos dentro (supervisord). La BD solo escucha en localhost: ningún otro
+# contenedor puede leerla. Ver docs/arquitectura.md, sección 8.
 
 name: newsproject
 
+x-service-base: &service-base
+  restart: unless-stopped
+  depends_on:
+    rabbitmq-init: { condition: service_completed_successfully }
+  networks: [newsproject-net]
+
+x-python-health: &python-health
+  test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 30s
+
 services:
+  # ------------------------------------------------------------------
+  # Broker
+  # ------------------------------------------------------------------
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: newsproject-rabbitmq
@@ -13,8 +35,7 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
     ports:
-      - "5672:5672"     # AMQP
-      - "15672:15672"   # Panel web
+      - "15672:15672"   # Panel web (el puerto AMQP 5672 se publica en docker-compose.override.yml)
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -23,15 +44,15 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
-    networks:
-      - newsproject-net
+    networks: [newsproject-net]
+
+  # Carga exchanges, colas (quorum) y bindings desde definitions.json y termina.
   rabbitmq-init:
     image: curlimages/curl:8.10.1
     container_name: newsproject-rabbitmq-init
     restart: "no"
     depends_on:
-      rabbitmq:
-        condition: service_healthy
+      rabbitmq: { condition: service_healthy }
     environment:
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASS: ${RABBITMQ_PASS}
@@ -47,71 +68,127 @@ services:
         -X POST http://rabbitmq:15672/api/definitions
         -d @/definitions.json
         && echo "Definiciones importadas"
-    networks:
-      - newsproject-net
+    networks: [newsproject-net]
 
-  postgres:
-    image: postgres:16
-    container_name: newsproject-postgres
-    restart: unless-stopped
+  # ------------------------------------------------------------------
+  # Microservicios (backend + BD en el mismo contenedor)
+  # ------------------------------------------------------------------
+  ingesta:                       # Kevin · FastAPI + MongoDB
+    <<: *service-base
+    build: ./ingesta
+    container_name: newsproject-ingesta
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      # Se ejecuta solo la primera vez (volumen vacío)
-      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      MONGO_INITDB_ROOT_USERNAME: ${INGESTA_DB_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${INGESTA_DB_PASS}
+      DATABASE_URL: mongodb://${INGESTA_DB_USER}:${INGESTA_DB_PASS}@localhost:27017/ingesta?authSource=admin
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+    volumes: ["ingesta_data:/data/db"]
+    healthcheck: *python-health
+
+  clasificacion:                 # Fabricio · FastAPI + PostgreSQL
+    <<: *service-base
+    build: ./clasificacion
+    container_name: newsproject-clasificacion
+    environment:
+      POSTGRES_DB: clasificacion
+      POSTGRES_USER: ${CLASIFICACION_DB_USER}
+      POSTGRES_PASSWORD: ${CLASIFICACION_DB_PASS}
+      DATABASE_URL: postgresql://${CLASIFICACION_DB_USER}:${CLASIFICACION_DB_PASS}@localhost:5432/clasificacion
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+      MIN_SCORE: ${CLASIFICACION_MIN_SCORE:-0.5}
+    volumes: ["clasificacion_data:/var/lib/postgresql/data"]
+    healthcheck: *python-health
+
+  busqueda:                      # Fabricio · FastAPI + MongoDB
+    <<: *service-base
+    build: ./busqueda
+    container_name: newsproject-busqueda
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${BUSQUEDA_DB_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${BUSQUEDA_DB_PASS}
+      DATABASE_URL: mongodb://${BUSQUEDA_DB_USER}:${BUSQUEDA_DB_PASS}@localhost:27017/busqueda?authSource=admin
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+    volumes: ["busqueda_data:/data/db"]
+    healthcheck: *python-health
+
+  usuarios:                      # Ariana · FastAPI + PostgreSQL
+    <<: *service-base
+    build: ./usuarios
+    container_name: newsproject-usuarios
+    environment:
+      POSTGRES_DB: usuarios
+      POSTGRES_USER: ${USUARIOS_DB_USER}
+      POSTGRES_PASSWORD: ${USUARIOS_DB_PASS}
+      DATABASE_URL: postgresql://${USUARIOS_DB_USER}:${USUARIOS_DB_PASS}@localhost:5432/usuarios
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
+    volumes: ["usuarios_data:/var/lib/postgresql/data"]
+    healthcheck: *python-health
+
+  notificaciones:                # Ariel · Spring Boot + PostgreSQL
+    <<: *service-base
+    build: ./notificaciones
+    container_name: newsproject-notificaciones
+    environment:
+      POSTGRES_DB: notificaciones
+      POSTGRES_USER: ${NOTIFICACIONES_DB_USER}
+      POSTGRES_PASSWORD: ${NOTIFICACIONES_DB_PASS}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/notificaciones
+      SPRING_DATASOURCE_USERNAME: ${NOTIFICACIONES_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${NOTIFICACIONES_DB_PASS}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASS}
+    volumes: ["notificaciones_data:/var/lib/postgresql/data"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 10
-    networks:
-      - newsproject-net
+      start_period: 60s
 
-  mongo:
-    image: mongo:7
-    container_name: newsproject-mongo
+  # ------------------------------------------------------------------
+  # Entrada única y frontend
+  # ------------------------------------------------------------------
+  gateway:                       # Ariana · FastAPI, sin BD
+    build: ./gateway
+    container_name: newsproject-gateway
     restart: unless-stopped
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS}
+      INGESTA_URL: http://ingesta:8000
+      CLASIFICACION_URL: http://clasificacion:8000
+      BUSQUEDA_URL: http://busqueda:8000
+      USUARIOS_URL: http://usuarios:8000
+      NOTIFICACIONES_URL: http://notificaciones:8080
     ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
-    networks:
-      - newsproject-net
+      - "8080:8000"
+    # service_started (no healthy): si un servicio falla, el gateway igual
+    # arranca y responde 503 solo en las rutas de ese servicio.
+    depends_on:
+      ingesta: { condition: service_started }
+      clasificacion: { condition: service_started }
+      busqueda: { condition: service_started }
+      usuarios: { condition: service_started }
+      notificaciones: { condition: service_started }
+    healthcheck: *python-health
+    networks: [newsproject-net]
 
-  # ---------------------------------------------------------------
-  # Cada integrante agrega su servicio desde su rama. Plantilla:
-  #
-  # notificaciones:
-  #   build: ./notificaciones
-  #   container_name: newsproject-notificaciones
-  #   restart: unless-stopped
-  #   environment:
-  #     RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672
-  #     DB_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/notificaciones
-  #   depends_on:
-  #     rabbitmq: { condition: service_healthy }
-  #     postgres: { condition: service_healthy }
-  #   networks:
-  #     - newsproject-net
-  # ---------------------------------------------------------------
+  frontend:                      # Todo el grupo · React + Nginx
+    build: ./frontend
+    container_name: newsproject-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on: [gateway]
+    networks: [newsproject-net]
 
 volumes:
   rabbitmq_data:
-  postgres_data:
-  mongo_data:
+  ingesta_data:
+  clasificacion_data:
+  busqueda_data:
+  usuarios_data:
+  notificaciones_data:
 
 networks:
   newsproject-net:
