@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Prueba de notificaciones</title>
+  <style>
+    body { font-family: sans-serif; max-width: 720px; margin: 2rem auto; }
+    #estado { font-weight: bold; }
+    .noticia { border: 1px solid #ccc; border-radius: 6px; padding: .6rem 1rem; margin: .6rem 0; }
+    .cat { font-size: .8rem; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>Notificaciones en vivo</h1>
+  <p>Estado: <span id="estado">conectando...</span></p>
+  <div id="lista"></div>
+
+  <script>
+    const estado = document.getElementById('estado');
+    const lista = document.getElementById('lista');
+    const ws = new WebSocket(`ws://${location.host}/ws/notifications`);
+
+    ws.onopen = () => estado.textContent = 'conectado';
+    ws.onclose = () => estado.textContent = 'desconectado';
+    ws.onerror = () => estado.textContent = 'error';
+    ws.onmessage = (e) => {
+      const ev = JSON.parse(e.data);
+      const p = ev.payload;
+      const div = document.createElement('div');
+      div.className = 'noticia';
+      const cat = document.createElement('div');
+      cat.className = 'cat';
+      cat.textContent = `${p.category} | ${p.source}`;
+      const titulo = document.createElement('strong');
+      titulo.textContent = p.title;
+      const resumen = document.createElement('p');
+      resumen.textContent = p.summary;
+      div.append(cat, titulo, resumen);
+      lista.prepend(div);
+    };
+  </script>
+</body>
+</html>

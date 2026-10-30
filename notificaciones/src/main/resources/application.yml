@@ -1,0 +1,33 @@
+server:
+  port: 8083
+
+spring:
+  config:
+    import: optional:file:./.env[.properties]
+  application:
+    name: notificaciones
+  jackson:
+    # El contrato de eventos usa snake_case (event_id, article_id, ...)
+    property-naming-strategy: SNAKE_CASE
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASS:guest}
+    listener:
+      simple:
+        acknowledge-mode: auto
+        # Tras agotar los reintentos el mensaje se rechaza sin reencolar y
+        # RabbitMQ lo manda a la cola .dlq (ver docs/eventos.md)
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1s
+          multiplier: 2
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

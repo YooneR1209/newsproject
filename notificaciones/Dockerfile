@@ -1,26 +1,14 @@
-# Notificaciones: backend Spring Boot + PostgreSQL en el mismo contenedor (supervisord).
-
-# 1) Compilar el .jar
+# --- Etapa 1: compilar con Maven ---
 FROM maven:3.9-eclipse-temurin-21 AS build
-WORKDIR /src
-COPY pom.xml .
-RUN mvn -q -B dependency:go-offline
-COPY src ./src
-RUN mvn -q -B package -DskipTests
-
-# 2) Imagen final: PostgreSQL + JRE 21 + supervisord
-FROM postgres:16
-COPY --from=eclipse-temurin:21-jre /opt/java/openjdk /opt/java/openjdk
-ENV JAVA_HOME=/opt/java/openjdk PATH="/opt/java/openjdk/bin:${PATH}"
-
-RUN apt-get update \
- && apt-get install -y --no-install-recommends supervisor curl \
- && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
-COPY --from=build /src/target/notificaciones.jar /app/notificaciones.jar
-COPY supervisord.conf /etc/supervisor/conf.d/app.conf
+COPY pom.xml .
+RUN mvn -B -q dependency:go-offline
+COPY src ./src
+RUN mvn -B -q package -DskipTests
 
-EXPOSE 8080
-ENTRYPOINT []
-CMD ["supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]
+# --- Etapa 2: imagen final solo con JRE ---
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
+EXPOSE 8083
+ENTRYPOINT ["java", "-jar", "app.jar"]
